@@ -39,7 +39,8 @@ include:
 
 | 変数名 | 用途 | 備考 |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | Claude Code CLIの認証 | Protected + Masked推奨 |
+| `ANTHROPIC_API_KEY` | Claude Code CLIの認証(従量課金APIキー、本番運用向け) | console.anthropic.comで発行。Protected + Masked推奨 |
+| `CLAUDE_CODE_OAUTH_TOKEN` | Claude Code CLIの認証(Pro/Maxサブスクリプション、PoC向け) | 手元で`claude setup-token`を実行して発行(1年間有効、推論専用)。`ANTHROPIC_API_KEY`とどちらか一方を設定すればよい。継続的な自動ループ運用では利用枠超過・利用規約上の懸念があるため、本番は`ANTHROPIC_API_KEY`推奨(README下部の注意点も参照) |
 | `AI_LOOP_BOT_TOKEN_DESIGN` | 設計役用GitLabアクセストークン | 最小権限(MR/Issue読み取り、docs書き込み相当) |
 | `AI_LOOP_BOT_TOKEN_CODE` | コーディング役用GitLabアクセストークン | 最小権限(ソースpush) |
 | `AI_LOOP_BOT_TOKEN_REVIEW` | レビュー役/guard/test/escalate用GitLabアクセストークン | コメント・ラベル操作のみ、マージ権限は付与しない |

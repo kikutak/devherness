@@ -114,6 +114,7 @@ design-role:
     - if: '$CI_PIPELINE_SOURCE == "trigger" && $LOOP_PHASE == "design"'
     - if: '$CI_PIPELINE_SOURCE == "web" && $LOOP_PHASE == "design"'
   script:
+    - /opt/ai-loop/ci/fetch_issue_context.sh
     - !reference [.ai_loop_mcp_setup, script]
     - >
       claude -p "Issue #${ISSUE_IID} を分析し、設計ドキュメントとMR引き継ぎファイルを作成してください。"

@@ -97,6 +97,12 @@ gl_issue_close() {
   gl_curl PUT "/issues/$1" '{"state_event":"close"}' >/dev/null
 }
 
+# gl_issue_notes <iid> -> notes配列(JSON、システム通知除く)
+gl_issue_notes() {
+  gl_curl GET "/issues/$1/notes?per_page=100&sort=asc&order_by=created_at" \
+    | jq -c '[.[] | select(.system == false)]'
+}
+
 # gl_mr_create <source_branch> <target_branch> <title> <description> <labels_csv>
 gl_mr_create() {
   local source="$1" target="$2" title="$3" desc="$4" labels="$5"

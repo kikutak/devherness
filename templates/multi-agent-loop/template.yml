@@ -52,11 +52,11 @@ variables:
     - git config --global --add safe.directory '*'
     - git config --global user.email "ai-loop-bot@${CI_SERVER_HOST}"
     - git config --global user.name "ai-loop-bot"
-    # ${CI_SERVER_HOST}(gitlab.lab.internal)の証明書がコンテナのOS信頼ストアで
-    # 検証できないラボ環境向けの暫定対応。本番導入時は内部CA証明書を
-    # イメージの信頼ストアに登録する方式に切り替えることを推奨(README参照)。
+    # GitLabインスタンスがhttpsの場合、自己署名/内部CA証明書で検証エラーになる
+    # ラボ環境向けの暫定対応(本番導入時は内部CA証明書をイメージの信頼ストアに
+    # 登録する方式に切り替えることを推奨、README参照)。httpの場合は無害。
     - git config --global http.sslVerify false
-    - git remote set-url origin "https://ai-loop-bot:${AI_LOOP_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+    - 'git remote set-url origin "${CI_SERVER_PROTOCOL}://ai-loop-bot:${AI_LOOP_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"'
 
 .ai_loop_mcp_setup:
   script:

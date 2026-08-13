@@ -18,6 +18,10 @@ spec:
     mcp_allowed_tools:
       description: "設計役/レビュー役に許可するGitLab MCPサーバのツール名(カンマ区切り、例: mcp__gitlab__create_note,mcp__gitlab__list_labels)。導入するMCPサーバの実際のツール名に合わせて設定すること(ADR-0005参照)。空の場合MCPは無効。"
       default: ""
+    runner_tags:
+      description: "全jobに付与するRunner tag(配列)。Runnerがuntagged jobを拾わない設定の場合は必須。例: [\"docker\"]"
+      type: array
+      default: []
 ---
 stages:
   - guard
@@ -38,6 +42,7 @@ variables:
 
 .ai_loop_image:
   image: $[[ inputs.image ]]
+  tags: $[[ inputs.runner_tags ]]
 
 .ai_loop_git_auth:
   before_script:

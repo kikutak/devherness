@@ -116,6 +116,7 @@ design-role:
     - if: '$CI_PIPELINE_SOURCE == "web" && $LOOP_PHASE == "design"'
   script:
     - !reference [.ai_loop_mcp_setup, script]
+    - echo "DEBUG: ANTHROPIC_API_KEY length=${#ANTHROPIC_API_KEY} / CLAUDE_CODE_OAUTH_TOKEN length=${#CLAUDE_CODE_OAUTH_TOKEN}"
     - >
       claude -p "Issue #${ISSUE_IID} を分析し、設計ドキュメントとMR引き継ぎファイルを作成してください。"
       --append-system-prompt "$(cat /opt/ai-loop/prompts/design-role.md)"

@@ -17,6 +17,10 @@ docs/                                     - 設計ドキュメント・ADR
 
 `ci/`・`prompts/`・`mcp/`はコンポーネント利用側のリポジトリには配置されません。`docker/agent-runner/Dockerfile`でビルドしたイメージの`/opt/ai-loop/`配下に焼き込まれ、`template.yml`の各jobはそのイメージ内のパスを直接呼び出します。
 
+## 前提: devhernessプロジェクトの可視性
+
+devhernessは**Private不可、Internal以上**にしてください。理由は、`merge_request_event`パイプライン(コーディング役のpushで自動発火するテスト/レビュー等)は、pushを行ったBotユーザー(各`AI_LOOP_BOT_TOKEN_*`に紐づくProject Access Token所有者)の権限で`include: component:`が解決されるため、devhernessがPrivateのままだとBotユーザーがdevhernessへのアクセス権を持たず、`Component '...' - project does not exist or you don't have sufficient permissions`エラーでパイプライン自体が作成できなくなる(実機検証で確認済み)。devhernessにはCI/CD変数等の秘密情報は含まれない(すべて利用側プロジェクトのCI/CD変数として管理される)ため、Internal公開は安全である。
+
 ## 利用方法(コンポーネント利用側プロジェクト)
 
 対象プロジェクトの`.gitlab-ci.yml`に以下を追加します。

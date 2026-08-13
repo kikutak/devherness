@@ -46,6 +46,10 @@ variables:
 
 .ai_loop_git_auth:
   before_script:
+    # ソース取得はGitLab Runnerのhelperコンテナ(root)が行うため、
+    # jobコンテナを非root(node)に変更したことでownership不一致が生じる。
+    # このコンテナは使い捨てのjob専用なので全ディレクトリを信頼して問題ない。
+    - git config --global --add safe.directory '*'
     - git config --global user.email "ai-loop-bot@${CI_SERVER_HOST}"
     - git config --global user.name "ai-loop-bot"
     - git remote set-url origin "https://ai-loop-bot:${AI_LOOP_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"

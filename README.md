@@ -30,6 +30,7 @@ include:
       max_loop: 5
       verify_environment: "staging"
       mcp_allowed_tools: ""           # MCPサーバ導入後に許可ツール名を設定(下記参照)
+      runner_tags: ["docker"]         # プロジェクトのRunnerがuntagged jobを拾わない設定の場合は必須。Settings > CI/CD > Runnersで確認
 ```
 
 `<version>`はこのリポジトリのタグ(例: `1.0.0`)を指定してください。

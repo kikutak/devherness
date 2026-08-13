@@ -69,6 +69,7 @@ include:
 実装にあたり、以下は本リポジトリ単独では検証できないため、導入先のGitLabインスタンス/Claude Code CLIのバージョンで確認してください。
 
 - `claude` CLIの正確なフラグ名(`--allowedTools` 等)はバージョンにより変わる可能性があるため、`claude --help` で確認する。
+- **`--permission-mode bypassPermissions` について**: `-p`(非対話)モードではTTYが無く承認プロンプトを表示できないため、`--allowedTools`を指定していてもWrite/Edit/Bash等の書き込み系ツール呼び出しが「承認待ち」のまま拒否される(実機検証で確認済み)。これを回避するため全ロールのclaude呼び出しに`--permission-mode bypassPermissions`を付与している。**この設定下でも`--allowedTools`によるツール制限が実効的に機能するかは要検証**(bypassPermissionsが承認プロンプトの省略のみを行うのか、allowedTools自体も無効化してしまうのかを、実際のGitLab環境で確認すること)。仮にallowedToolsが効かなくなる場合、Claudeへのツール制限による安全設計([docs/design/multi-agent-dev-loop.md 9章](docs/design/multi-agent-dev-loop.md#9-セキュリティ権限設計))が機能しなくなるため、コンテナ・ネットワーク・GitLabトークン権限など他の防御層を主たる境界として見直す必要がある。
 - GitLab MCPサーバのパッケージ名・バージョン・提供ツール名([mcp/gitlab.mcp.json.tmpl](mcp/gitlab.mcp.json.tmpl)、[ADR-0005](docs/adr/0005-gitlab-integration-mcp-vs-cli.md))。選定後、`mcp_allowed_tools` inputに実際のツール名を設定すること。
 - スコープ付きラベル(`key::value`)がAPI経由でも自動的に旧ラベルを置換するか、対象GitLabのバージョン/設定で実地検証する([ADR-0002](docs/adr/0002-state-management-labels-and-repo-file.md))。
 - プロジェクトの「マージ条件(pipelines must succeed等)」設定と、`merge-gate` job(同一パイプライン内からのマージAPI呼び出し)の組み合わせが問題なく動作するか([ci/gitlab_merge_mr.sh](ci/gitlab_merge_mr.sh)のコメント参照)。

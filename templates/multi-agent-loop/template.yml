@@ -120,6 +120,7 @@ design-role:
       claude -p "Issue #${ISSUE_IID} を分析し、設計ドキュメントとMR引き継ぎファイルを作成してください。"
       --append-system-prompt "$(cat /opt/ai-loop/prompts/design-role.md)"
       --output-format json
+      --permission-mode bypassPermissions
       ${AI_LOOP_CLAUDE_MODEL:+--model "$AI_LOOP_CLAUDE_MODEL"}
       $AI_LOOP_MCP_ARGS
       --allowedTools "Read,Write(docs/**),Write(.agent-loop/**),Bash(git *)${AI_LOOP_MCP_ALLOWED_TOOLS:+,$AI_LOOP_MCP_ALLOWED_TOOLS}"
@@ -151,6 +152,7 @@ coding-role:
       claude -p "設計ドキュメントおよびレビュー指摘(あれば)に基づき実装してください。(Issue #${ISSUE_IID})"
       --append-system-prompt "$(cat /opt/ai-loop/prompts/coder-role.md)"
       --output-format json
+      --permission-mode bypassPermissions
       ${AI_LOOP_CLAUDE_MODEL:+--model "$AI_LOOP_CLAUDE_MODEL"}
       --allowedTools "Read,Write,Edit,Bash(git *)"
     - git add -A
@@ -195,6 +197,7 @@ review-role:
       claude -p "このMRの差分をレビューし、review-result.json を作成してください。"
       --append-system-prompt "$(cat /opt/ai-loop/prompts/reviewer-role.md)"
       --output-format json
+      --permission-mode bypassPermissions
       ${AI_LOOP_CLAUDE_MODEL:+--model "$AI_LOOP_CLAUDE_MODEL"}
       $AI_LOOP_MCP_ARGS
       --allowedTools "Read,Bash(git diff *),Bash(git log *)${AI_LOOP_MCP_ALLOWED_TOOLS:+,$AI_LOOP_MCP_ALLOWED_TOOLS}"
@@ -239,6 +242,7 @@ verify-role:
       claude -p "直近でmainにマージされた変更を検証環境で確認し、report.md / result.json を作成してください。"
       --append-system-prompt "$(cat /opt/ai-loop/prompts/verifier-role.md)"
       --output-format json
+      --permission-mode bypassPermissions
       ${AI_LOOP_CLAUDE_MODEL:+--model "$AI_LOOP_CLAUDE_MODEL"}
       --allowedTools "Read,Bash(kubectl get *),Bash(kubectl logs *),Bash(curl -sS -X GET *)"
     - /opt/ai-loop/ci/verify_report_push.sh

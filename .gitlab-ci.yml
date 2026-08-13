@@ -36,7 +36,18 @@ build-agent-runner-image:
       # registry.lab.internalの証明書がRunnerホスト/dind双方から信頼されないため、
       # dindサービス自体にもinsecure-registryを明示的に渡す
       # (ホストの/etc/docker/daemon.jsonの設定はdind内部のデーモンには継承されない)。
-      command: ["--insecure-registry=registry.lab.internal"]
+      # dockerd-entrypoint.shはcommand未指定時のみTLS/host bindのデフォルト引数を
+      # 自動付与するため、一部の引数だけ渡すとデフォルトが失われる。GitLab Runnerの
+      # dind連携が前提とするTLS/hostバインドをここで明示的に再現した上で
+      # --insecure-registryを追加する。
+      command:
+        - "--host=unix:///var/run/docker.sock"
+        - "--host=tcp://0.0.0.0:2376"
+        - "--tlsverify"
+        - "--tlscacert=/certs/server/ca.pem"
+        - "--tlscert=/certs/server/cert.pem"
+        - "--tlskey=/certs/server/key.pem"
+        - "--insecure-registry=registry.lab.internal"
   tags:
     - docker
   variables:

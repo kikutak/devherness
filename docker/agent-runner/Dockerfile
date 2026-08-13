@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     jq \
     ca-certificates \
     gettext-base \
+    make \
     && rm -rf /var/lib/apt/lists/*
 
 # glab CLI (GitLab公式CLI)。バージョンは導入時に固定/更新すること。

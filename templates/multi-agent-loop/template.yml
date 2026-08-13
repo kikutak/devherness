@@ -106,17 +106,15 @@ design-role:
   needs: ["guard"]
   variables:
     AI_LOOP_TOKEN: $AI_LOOP_BOT_TOKEN_DESIGN
-    ANTHROPIC_API_KEY: $ANTHROPIC_API_KEY
-    # claude setup-token(Pro/Maxサブスクリプション、PoC向け)を使う場合はこちら。
-    # ANTHROPIC_API_KEYと両方セットしておけば、CI/CD変数側で未設定の方は空文字になり
-    # claude CLI側が適切な方を使う(将来API keyへ切り替える際もtemplate.yml変更不要)。
-    CLAUDE_CODE_OAUTH_TOKEN: $CLAUDE_CODE_OAUTH_TOKEN
+    # ANTHROPIC_API_KEY / CLAUDE_CODE_OAUTH_TOKEN はプロジェクトのCI/CD変数として
+    # 設定していれば自動的にジョブへ環境変数として渡るため、ここでの再宣言は不要
+    # (むしろ自己参照になり、未設定時に文字列"$ANTHROPIC_API_KEY"がそのまま値に
+    # なってしまう不具合があったため削除した)。
   rules:
     - if: '$CI_PIPELINE_SOURCE == "trigger" && $LOOP_PHASE == "design"'
     - if: '$CI_PIPELINE_SOURCE == "web" && $LOOP_PHASE == "design"'
   script:
     - !reference [.ai_loop_mcp_setup, script]
-    - 'echo "DEBUG ANTHROPIC_API_KEY_LEN=${#ANTHROPIC_API_KEY} CLAUDE_CODE_OAUTH_TOKEN_LEN=${#CLAUDE_CODE_OAUTH_TOKEN}"'
     - >
       claude -p "Issue #${ISSUE_IID} を分析し、設計ドキュメントとMR引き継ぎファイルを作成してください。"
       --append-system-prompt "$(cat /opt/ai-loop/prompts/design-role.md)"
@@ -138,11 +136,10 @@ coding-role:
   needs: ["guard"]
   variables:
     AI_LOOP_TOKEN: $AI_LOOP_BOT_TOKEN_CODE
-    ANTHROPIC_API_KEY: $ANTHROPIC_API_KEY
-    # claude setup-token(Pro/Maxサブスクリプション、PoC向け)を使う場合はこちら。
-    # ANTHROPIC_API_KEYと両方セットしておけば、CI/CD変数側で未設定の方は空文字になり
-    # claude CLI側が適切な方を使う(将来API keyへ切り替える際もtemplate.yml変更不要)。
-    CLAUDE_CODE_OAUTH_TOKEN: $CLAUDE_CODE_OAUTH_TOKEN
+    # ANTHROPIC_API_KEY / CLAUDE_CODE_OAUTH_TOKEN はプロジェクトのCI/CD変数として
+    # 設定していれば自動的にジョブへ環境変数として渡るため、ここでの再宣言は不要
+    # (むしろ自己参照になり、未設定時に文字列"$ANTHROPIC_API_KEY"がそのまま値に
+    # なってしまう不具合があったため削除した)。
   rules:
     - if: '$CI_PIPELINE_SOURCE == "trigger" && $LOOP_PHASE == "code"'
     - if: '$CI_PIPELINE_SOURCE == "web" && $LOOP_PHASE == "code"'
@@ -185,11 +182,10 @@ review-role:
   needs: ["guard", "test-run"]
   variables:
     AI_LOOP_TOKEN: $AI_LOOP_BOT_TOKEN_REVIEW
-    ANTHROPIC_API_KEY: $ANTHROPIC_API_KEY
-    # claude setup-token(Pro/Maxサブスクリプション、PoC向け)を使う場合はこちら。
-    # ANTHROPIC_API_KEYと両方セットしておけば、CI/CD変数側で未設定の方は空文字になり
-    # claude CLI側が適切な方を使う(将来API keyへ切り替える際もtemplate.yml変更不要)。
-    CLAUDE_CODE_OAUTH_TOKEN: $CLAUDE_CODE_OAUTH_TOKEN
+    # ANTHROPIC_API_KEY / CLAUDE_CODE_OAUTH_TOKEN はプロジェクトのCI/CD変数として
+    # 設定していれば自動的にジョブへ環境変数として渡るため、ここでの再宣言は不要
+    # (むしろ自己参照になり、未設定時に文字列"$ANTHROPIC_API_KEY"がそのまま値に
+    # なってしまう不具合があったため削除した)。
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
   script:
@@ -231,11 +227,10 @@ verify-role:
     action: access
   variables:
     AI_LOOP_TOKEN: $AI_LOOP_BOT_TOKEN_VERIFY
-    ANTHROPIC_API_KEY: $ANTHROPIC_API_KEY
-    # claude setup-token(Pro/Maxサブスクリプション、PoC向け)を使う場合はこちら。
-    # ANTHROPIC_API_KEYと両方セットしておけば、CI/CD変数側で未設定の方は空文字になり
-    # claude CLI側が適切な方を使う(将来API keyへ切り替える際もtemplate.yml変更不要)。
-    CLAUDE_CODE_OAUTH_TOKEN: $CLAUDE_CODE_OAUTH_TOKEN
+    # ANTHROPIC_API_KEY / CLAUDE_CODE_OAUTH_TOKEN はプロジェクトのCI/CD変数として
+    # 設定していれば自動的にジョブへ環境変数として渡るため、ここでの再宣言は不要
+    # (むしろ自己参照になり、未設定時に文字列"$ANTHROPIC_API_KEY"がそのまま値に
+    # なってしまう不具合があったため削除した)。
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
   script:

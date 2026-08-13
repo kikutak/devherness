@@ -34,4 +34,10 @@ RUN chmod +x /opt/ai-loop/ci/*.sh /opt/ai-loop/ci/lib/*.sh
 
 ENV PATH="/opt/ai-loop/ci:${PATH}"
 
+# claude CLIは --permission-mode bypassPermissions (非対話CI実行に必須) を
+# root/sudo権限では拒否するため、非rootユーザーで実行する。
+# node:20-slim には既にUID 1000の "node" ユーザーが存在するためそれを再利用する。
+RUN mkdir -p /workspace && chown -R node:node /workspace
+
+USER node
 WORKDIR /workspace

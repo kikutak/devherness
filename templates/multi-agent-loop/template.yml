@@ -164,7 +164,7 @@ coding-role:
       ${AI_LOOP_CLAUDE_MODEL:+--model "$AI_LOOP_CLAUDE_MODEL"}
       --allowedTools "Read,Write,Edit,Bash(git *)"
     - git add -A
-    - git commit --allow-empty -m "feat(ai-loop) issue #${ISSUE_IID}" -m "Agent-Loop-Issue ${ISSUE_IID}"
+    - 'git commit --allow-empty -m "feat(ai-loop) issue no.${ISSUE_IID}" -m "Agent-Loop-Issue ${ISSUE_IID}"'
     - git push origin "HEAD:refs/heads/${AI_LOOP_TRACKING_BRANCH_PREFIX}${ISSUE_IID}"
 
 # ------------------------------------------------------------------

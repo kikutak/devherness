@@ -54,8 +54,11 @@ include:
 
 1. GitLab Issueを作成し、ラベル `agent::ready` を付与する。
 2. 以下のいずれかで設計フェーズを起動する:
-   - Pipeline Trigger APIを `LOOP_PHASE=design`, `ISSUE_IID=<issue iid>` 変数付きで直接呼び出す(即時起動)。
+   - **GitLabの「Run pipeline」画面**(プロジェクト > Build > Pipelines > Run pipeline)から、ブランチ/タグを選択し、CI/CD変数に `LOOP_PHASE=design`, `ISSUE_IID=<issue iid>` を入力して実行する。トークン不要でブラウザだけで完結する(動作確認時におすすめ)。
+   - Pipeline Trigger APIを `LOOP_PHASE=design`, `ISSUE_IID=<issue iid>` 変数付きでPOST呼び出しする(即時起動、CI外の自動化から使う想定)。
    - Pipeline Schedule(cron)を設定しておけば、`reconcile` jobが定期的に `agent::ready` かつ未着手のIssueを検知して自動的に起動する(取りこぼし救済、詳細は [ADR-0001](docs/adr/0001-orchestration-gitlab-ci-only.md))。
+
+上記いずれの方法でも、`guard`・`design-role`等のjobは `$CI_PIPELINE_SOURCE` が `web`(Run pipeline画面) または `trigger`(Trigger API)のいずれかにマッチするよう `template.yml` 側で対応済み。
 
 以降はレビュー→修正→マージ→検証→(必要なら再設計)まで自動で進行します。詳細なシーケンスは [docs/design/multi-agent-dev-loop.md 3章](docs/design/multi-agent-dev-loop.md#3-ループ全体のシーケンス) を参照してください。
 

@@ -74,5 +74,6 @@ include:
 - スコープ付きラベル(`key::value`)がAPI経由でも自動的に旧ラベルを置換するか、対象GitLabのバージョン/設定で実地検証する([ADR-0002](docs/adr/0002-state-management-labels-and-repo-file.md))。
 - プロジェクトの「マージ条件(pipelines must succeed等)」設定と、`merge-gate` job(同一パイプライン内からのマージAPI呼び出し)の組み合わせが問題なく動作するか([ci/gitlab_merge_mr.sh](ci/gitlab_merge_mr.sh)のコメント参照)。
 - Pipeline Scheduleの最小実行間隔([ADR-0001](docs/adr/0001-orchestration-gitlab-ci-only.md))。
+- **TLS証明書の検証について**: 自己署名/内部CA証明書を使うGitLabインスタンスの場合、Dockerレジストリ・dind・git等、複数の箇所で個別にTLS検証を回避する設定が必要になった(このリポジトリでは動作確認の速度を優先し、Runnerホストの`insecure-registries`設定や`git config http.sslVerify false`等のクイックな回避策を採用している)。**本番導入時は、内部CA証明書を`docker/agent-runner/Dockerfile`のOS信頼ストアに登録し`update-ca-certificates`する方式に切り替え、TLS検証を有効なままにすることを強く推奨する。**
 
 その他の未解決事項は [docs/design/multi-agent-dev-loop.md 11章](docs/design/multi-agent-dev-loop.md#11-未解決将来検討事項) にまとめています。

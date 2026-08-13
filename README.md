@@ -25,7 +25,7 @@ docs/                                     - 設計ドキュメント・ADR
 include:
   - component: $CI_SERVER_FQDN/<group>/devherness/multi-agent-loop@<version>
     inputs:
-      image: "$CI_REGISTRY_FQDN/<group>/devherness/agent-runner:<version>"
+      image: "$CI_REGISTRY/<group>/devherness/agent-runner:<version>"
       test_command: "npm test"        # 対象プロジェクトの言語・テストランナーに合わせる
       max_loop: 5
       verify_environment: "staging"

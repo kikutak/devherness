@@ -1,0 +1,15 @@
+{
+  "//": "設計役・レビュー役のjobで claude --mcp-config に渡すテンプレート。CIジョブ側で envsubst 等により環境変数を展開してから使用すること。パッケージ名・バージョンは導入時に社内npmレジストリ/許可リストと突き合わせて確定すること(ADR-0005参照)。",
+  "mcpServers": {
+    "gitlab": {
+      "command": "npx",
+      "args": ["-y", "GITLAB_MCP_SERVER_PACKAGE@GITLAB_MCP_SERVER_VERSION"],
+      "env": {
+        "GITLAB_API_URL": "${CI_API_V4_URL}",
+        "GITLAB_PERSONAL_ACCESS_TOKEN": "${AI_LOOP_TOKEN}",
+        "GITLAB_PROJECT_ID": "${CI_PROJECT_ID}",
+        "GITLAB_READ_ONLY_MODE": "false"
+      }
+    }
+  }
+}

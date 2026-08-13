@@ -1,0 +1,233 @@
+spec:
+  inputs:
+    image:
+      description: "docker/agent-runner/Dockerfile をビルドして発行したイメージ(必須、org固有のレジストリパス)"
+    max_loop:
+      description: "レビュー/テスト差し戻しループの上限回数"
+      default: 5
+      type: number
+    test_command:
+      description: "対象プロジェクトのテスト実行コマンド(言語非依存にするため抽象化)"
+      default: "make test"
+    verify_environment:
+      description: "検証役jobに紐付けるGitLab Environment名(Protected Environmentsでの資格情報スコープに使用)"
+      default: "staging"
+    claude_model:
+      description: "claude CLIに渡すモデル指定(空ならCLIの既定値を使用)"
+      default: ""
+    mcp_allowed_tools:
+      description: "設計役/レビュー役に許可するGitLab MCPサーバのツール名(カンマ区切り、例: mcp__gitlab__create_note,mcp__gitlab__list_labels)。導入するMCPサーバの実際のツール名に合わせて設定すること(ADR-0005参照)。空の場合MCPは無効。"
+      default: ""
+---
+stages:
+  - guard
+  - design
+  - code
+  - test
+  - review
+  - merge-gate
+  - verify
+  - escalate
+
+variables:
+  MAX_LOOP: $[[ inputs.max_loop ]]
+  TEST_COMMAND: $[[ inputs.test_command ]]
+  AI_LOOP_TRACKING_BRANCH_PREFIX: "agent-loop/issue-"
+  AI_LOOP_CLAUDE_MODEL: $[[ inputs.claude_model ]]
+  AI_LOOP_MCP_ALLOWED_TOOLS: $[[ inputs.mcp_allowed_tools ]]
+
+.ai_loop_image:
+  image: $[[ inputs.image ]]
+
+.ai_loop_git_auth:
+  before_script:
+    - git config --global user.email "ai-loop-bot@${CI_SERVER_HOST}"
+    - git config --global user.name "ai-loop-bot"
+    - git remote set-url origin "https://ai-loop-bot:${AI_LOOP_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+
+.ai_loop_mcp_setup:
+  script:
+    - envsubst < /opt/ai-loop/mcp/gitlab.mcp.json.tmpl > /tmp/gitlab.mcp.json
+    - export AI_LOOP_MCP_ARGS=""
+    - |
+      if [ -n "$AI_LOOP_MCP_ALLOWED_TOOLS" ]; then
+        AI_LOOP_MCP_ARGS="--mcp-config /tmp/gitlab.mcp.json --allowedTools ${AI_LOOP_MCP_ALLOWED_TOOLS}"
+      fi
+
+# ------------------------------------------------------------------
+# guard: パイプライン先頭でループ上限・blocked状態をチェックする。
+# 超過/既存ブロック時は非0終了し、GitLabのデフォルト挙動により
+# 後続stage(design/code/test/review/merge-gate/verify)は実行されない。
+# escalateのみ when: always で独立して起動する。
+# ------------------------------------------------------------------
+guard:
+  extends: .ai_loop_image
+  stage: guard
+  variables:
+    AI_LOOP_TOKEN: $AI_LOOP_BOT_TOKEN_REVIEW
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_PIPELINE_SOURCE == "trigger"'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+  script:
+    - /opt/ai-loop/ci/guard.sh
+  artifacts:
+    reports:
+      dotenv: guard.env
+
+# schedule (Pipeline Schedule) から起動される取りこぼし救済ジョブ。
+# agent::ready ラベルが付いた未着手Issueを検知して設計フェーズを起動する。
+reconcile:
+  extends: .ai_loop_image
+  stage: guard
+  variables:
+    AI_LOOP_TOKEN: $AI_LOOP_BOT_TOKEN_REVIEW
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+  script:
+    - /opt/ai-loop/ci/reconcile.sh
+
+# ------------------------------------------------------------------
+# design: 設計役。Issue(または検証NGフィードバック)を分析し、
+# 設計docを作成、MRの雛形を用意する。
+# ------------------------------------------------------------------
+design-role:
+  extends: [.ai_loop_image, .ai_loop_git_auth]
+  stage: design
+  needs: ["guard"]
+  variables:
+    AI_LOOP_TOKEN: $AI_LOOP_BOT_TOKEN_DESIGN
+    ANTHROPIC_API_KEY: $ANTHROPIC_API_KEY
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "trigger" && $LOOP_PHASE == "design"'
+  script:
+    - !reference [.ai_loop_mcp_setup, script]
+    - >
+      claude -p "$(cat /opt/ai-loop/prompts/design-role.md)"
+      --output-format json
+      ${AI_LOOP_CLAUDE_MODEL:+--model "$AI_LOOP_CLAUDE_MODEL"}
+      $AI_LOOP_MCP_ARGS
+      --allowedTools "Read,Write(docs/**),Write(.agent-loop/**),Bash(git *)"
+    - /opt/ai-loop/ci/gitlab_open_or_update_mr.sh
+    - /opt/ai-loop/ci/trigger_next.sh code "${AI_LOOP_TRACKING_BRANCH_PREFIX}${ISSUE_IID}"
+
+# ------------------------------------------------------------------
+# code: コーディング役。設計/レビュー指摘に基づき実装する。
+# 実装後のMRブランチへのpushが、merge_request_eventパイプライン
+# (test -> review)を自動的に誘発する。
+# ------------------------------------------------------------------
+coding-role:
+  extends: [.ai_loop_image, .ai_loop_git_auth]
+  stage: code
+  needs: ["guard"]
+  variables:
+    AI_LOOP_TOKEN: $AI_LOOP_BOT_TOKEN_CODE
+    ANTHROPIC_API_KEY: $ANTHROPIC_API_KEY
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "trigger" && $LOOP_PHASE == "code"'
+  script:
+    - git fetch origin "${AI_LOOP_TRACKING_BRANCH_PREFIX}${ISSUE_IID}"
+    - git checkout "${AI_LOOP_TRACKING_BRANCH_PREFIX}${ISSUE_IID}"
+    - >
+      claude -p "$(cat /opt/ai-loop/prompts/coder-role.md)"
+      --output-format json
+      ${AI_LOOP_CLAUDE_MODEL:+--model "$AI_LOOP_CLAUDE_MODEL"}
+      --allowedTools "Read,Write,Edit,Bash(git *)"
+    - git add -A
+    - git commit --allow-empty -m "feat(ai-loop) issue #${ISSUE_IID}" -m "Agent-Loop-Issue ${ISSUE_IID}"
+    - git push origin "HEAD:${AI_LOOP_TRACKING_BRANCH_PREFIX}${ISSUE_IID}"
+
+# ------------------------------------------------------------------
+# test: 決定論的なテスト実行(Claude非依存)。失敗時はコーディング役へ
+# 差し戻す(ループ回数にカウントする)。
+# ------------------------------------------------------------------
+test-run:
+  extends: .ai_loop_image
+  stage: test
+  needs: ["guard"]
+  variables:
+    AI_LOOP_TOKEN: $AI_LOOP_BOT_TOKEN_REVIEW
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+  script:
+    - /opt/ai-loop/ci/run_project_tests.sh || { /opt/ai-loop/ci/test_failed.sh; exit 1; }
+
+# ------------------------------------------------------------------
+# review: レビュー役。差分をレビューし、承認/差し戻しを判断する。
+# 判断結果に応じて merge-gate または coding-role を起動する
+# (マージの実行自体はClaudeを介さない。docs/adr/0004参照)。
+# ------------------------------------------------------------------
+review-role:
+  extends: [.ai_loop_image, .ai_loop_git_auth]
+  stage: review
+  needs: ["guard", "test-run"]
+  variables:
+    AI_LOOP_TOKEN: $AI_LOOP_BOT_TOKEN_REVIEW
+    ANTHROPIC_API_KEY: $ANTHROPIC_API_KEY
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+  script:
+    - !reference [.ai_loop_mcp_setup, script]
+    - >
+      claude -p "$(cat /opt/ai-loop/prompts/reviewer-role.md)"
+      --output-format json
+      ${AI_LOOP_CLAUDE_MODEL:+--model "$AI_LOOP_CLAUDE_MODEL"}
+      $AI_LOOP_MCP_ARGS
+      --allowedTools "Read,Bash(git diff *),Bash(git log *)"
+    - /opt/ai-loop/ci/gitlab_post_review.sh
+
+# ------------------------------------------------------------------
+# merge-gate: 決定論的なマージ実行(Claude非依存)。docs/adr/0004参照。
+# ------------------------------------------------------------------
+merge-gate:
+  extends: .ai_loop_image
+  stage: merge-gate
+  needs: ["guard"]
+  variables:
+    AI_LOOP_TOKEN: $AI_LOOP_BOT_TOKEN_MERGE
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "trigger" && $LOOP_PHASE == "merge"'
+  script:
+    - /opt/ai-loop/ci/gitlab_merge_mr.sh
+
+# ------------------------------------------------------------------
+# verify: 検証役。mainへのマージ後、検証環境で動作確認する。
+# 初期段階ではClaudeが検証環境を能動操作する想定(将来的に自動E2Eへ移行、
+# docs/design/multi-agent-dev-loop.md 10章参照)。
+# ------------------------------------------------------------------
+verify-role:
+  extends: [.ai_loop_image, .ai_loop_git_auth]
+  stage: verify
+  environment:
+    name: $[[ inputs.verify_environment ]]
+    action: access
+  variables:
+    AI_LOOP_TOKEN: $AI_LOOP_BOT_TOKEN_VERIFY
+    ANTHROPIC_API_KEY: $ANTHROPIC_API_KEY
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+  script:
+    - >
+      claude -p "$(cat /opt/ai-loop/prompts/verifier-role.md)"
+      --output-format json
+      ${AI_LOOP_CLAUDE_MODEL:+--model "$AI_LOOP_CLAUDE_MODEL"}
+      --allowedTools "Read,Bash(kubectl get *),Bash(kubectl logs *),Bash(curl -sS -X GET *)"
+    - /opt/ai-loop/ci/verify_report_push.sh
+
+# ------------------------------------------------------------------
+# escalate: ループ上限超過時のみ実際に通知を行う。パイプラインには
+# 常に含めるが(when: always)、blocked-human でなければ即座に正常終了する
+# (ci/notify_human.sh 冒頭のガード節を参照)。
+# ------------------------------------------------------------------
+escalate:
+  extends: .ai_loop_image
+  stage: escalate
+  variables:
+    AI_LOOP_TOKEN: $AI_LOOP_BOT_TOKEN_REVIEW
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: always
+    - if: '$CI_PIPELINE_SOURCE == "trigger"'
+      when: always
+  script:
+    - /opt/ai-loop/ci/notify_human.sh

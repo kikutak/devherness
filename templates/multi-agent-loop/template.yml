@@ -51,8 +51,11 @@ variables:
     - export AI_LOOP_MCP_ARGS=""
     - |
       if [ -n "$AI_LOOP_MCP_ALLOWED_TOOLS" ]; then
-        AI_LOOP_MCP_ARGS="--mcp-config /tmp/gitlab.mcp.json --allowedTools ${AI_LOOP_MCP_ALLOWED_TOOLS}"
+        AI_LOOP_MCP_ARGS="--mcp-config /tmp/gitlab.mcp.json --strict-mcp-config"
       fi
+    # 注意: --allowedTools は1回のclaude呼び出しにつき1度しか渡せないため、
+    # MCPツール名は各job側で組み立てる本来のallowedTools文字列に連結すること
+    # ($AI_LOOP_MCP_ALLOWED_TOOLS を参照)。ここでは接続設定のみ行う。
 
 # ------------------------------------------------------------------
 # guard: パイプライン先頭でループ上限・blocked状態をチェックする。
@@ -103,11 +106,12 @@ design-role:
   script:
     - !reference [.ai_loop_mcp_setup, script]
     - >
-      claude -p "$(cat /opt/ai-loop/prompts/design-role.md)"
+      claude -p "Issue #${ISSUE_IID} を分析し、設計ドキュメントとMR引き継ぎファイルを作成してください。"
+      --append-system-prompt "$(cat /opt/ai-loop/prompts/design-role.md)"
       --output-format json
       ${AI_LOOP_CLAUDE_MODEL:+--model "$AI_LOOP_CLAUDE_MODEL"}
       $AI_LOOP_MCP_ARGS
-      --allowedTools "Read,Write(docs/**),Write(.agent-loop/**),Bash(git *)"
+      --allowedTools "Read,Write(docs/**),Write(.agent-loop/**),Bash(git *)${AI_LOOP_MCP_ALLOWED_TOOLS:+,$AI_LOOP_MCP_ALLOWED_TOOLS}"
     - /opt/ai-loop/ci/gitlab_open_or_update_mr.sh
     - /opt/ai-loop/ci/trigger_next.sh code "${AI_LOOP_TRACKING_BRANCH_PREFIX}${ISSUE_IID}"
 
@@ -129,7 +133,8 @@ coding-role:
     - git fetch origin "${AI_LOOP_TRACKING_BRANCH_PREFIX}${ISSUE_IID}"
     - git checkout "${AI_LOOP_TRACKING_BRANCH_PREFIX}${ISSUE_IID}"
     - >
-      claude -p "$(cat /opt/ai-loop/prompts/coder-role.md)"
+      claude -p "設計ドキュメントおよびレビュー指摘(あれば)に基づき実装してください。(Issue #${ISSUE_IID})"
+      --append-system-prompt "$(cat /opt/ai-loop/prompts/coder-role.md)"
       --output-format json
       ${AI_LOOP_CLAUDE_MODEL:+--model "$AI_LOOP_CLAUDE_MODEL"}
       --allowedTools "Read,Write,Edit,Bash(git *)"
@@ -169,11 +174,12 @@ review-role:
   script:
     - !reference [.ai_loop_mcp_setup, script]
     - >
-      claude -p "$(cat /opt/ai-loop/prompts/reviewer-role.md)"
+      claude -p "このMRの差分をレビューし、review-result.json を作成してください。"
+      --append-system-prompt "$(cat /opt/ai-loop/prompts/reviewer-role.md)"
       --output-format json
       ${AI_LOOP_CLAUDE_MODEL:+--model "$AI_LOOP_CLAUDE_MODEL"}
       $AI_LOOP_MCP_ARGS
-      --allowedTools "Read,Bash(git diff *),Bash(git log *)"
+      --allowedTools "Read,Bash(git diff *),Bash(git log *)${AI_LOOP_MCP_ALLOWED_TOOLS:+,$AI_LOOP_MCP_ALLOWED_TOOLS}"
     - /opt/ai-loop/ci/gitlab_post_review.sh
 
 # ------------------------------------------------------------------
@@ -208,7 +214,8 @@ verify-role:
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
   script:
     - >
-      claude -p "$(cat /opt/ai-loop/prompts/verifier-role.md)"
+      claude -p "直近でmainにマージされた変更を検証環境で確認し、report.md / result.json を作成してください。"
+      --append-system-prompt "$(cat /opt/ai-loop/prompts/verifier-role.md)"
       --output-format json
       ${AI_LOOP_CLAUDE_MODEL:+--model "$AI_LOOP_CLAUDE_MODEL"}
       --allowedTools "Read,Bash(kubectl get *),Bash(kubectl logs *),Bash(curl -sS -X GET *)"

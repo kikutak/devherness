@@ -15,7 +15,9 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/gitlab_api.sh"
 
 issue_iid="${ISSUE_IID:-}"
 if [[ -z "$issue_iid" ]]; then
-  issue_iid=$(git log -1 --format=%B | grep -oP 'Agent-Loop-Issue:\s*\K[0-9]+' || true)
+  # マージコミット(GitLabのデフォルト)の場合、trailerは直近コミットではなく
+  # その親(featコミット)にあるため、直近数コミットを遡って検索する。
+  issue_iid=$(git log -5 --format=%B | grep -oP 'Agent-Loop-Issue\s+\K[0-9]+' | head -1 || true)
 fi
 
 if [[ -z "$issue_iid" ]]; then

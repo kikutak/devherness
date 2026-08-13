@@ -123,7 +123,6 @@ design-role:
     - if: '$CI_PIPELINE_SOURCE == "web" && $LOOP_PHASE == "design"'
   script:
     - /opt/ai-loop/ci/fetch_issue_context.sh
-    - 'echo "DEBUG AI_LOOP_TOKEN_LEN=${#AI_LOOP_TOKEN}"'
     - !reference [.ai_loop_mcp_setup, script]
     - >
       claude -p "Issue #${ISSUE_IID} を分析し、設計ドキュメントとMR引き継ぎファイルを作成してください。"
@@ -166,7 +165,7 @@ coding-role:
       --allowedTools "Read,Write,Edit,Bash(git *)"
     - git add -A
     - git commit --allow-empty -m "feat(ai-loop) issue #${ISSUE_IID}" -m "Agent-Loop-Issue ${ISSUE_IID}"
-    - git push origin "HEAD:${AI_LOOP_TRACKING_BRANCH_PREFIX}${ISSUE_IID}"
+    - git push origin "HEAD:refs/heads/${AI_LOOP_TRACKING_BRANCH_PREFIX}${ISSUE_IID}"
 
 # ------------------------------------------------------------------
 # test: 決定論的なテスト実行(Claude非依存)。失敗時はコーディング役へ

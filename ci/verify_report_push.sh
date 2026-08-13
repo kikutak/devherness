@@ -37,7 +37,7 @@ git checkout -B "$branch" "origin/${branch}" 2>/dev/null || git checkout -B "$br
 
 git add .agent-loop/verification
 git commit -m "chore(ai-loop): verification result for issue #${issue_iid} (${status})"
-git push origin "HEAD:${branch}"
+git push origin "HEAD:refs/heads/${branch}"
 
 case "$status" in
   ok)

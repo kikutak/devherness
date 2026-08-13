@@ -36,7 +36,7 @@ else
   git commit -m "chore(ai-loop): design output for issue #${ISSUE_IID}"
 fi
 
-git push origin "HEAD:${branch}"
+git push origin "HEAD:refs/heads/${branch}"
 
 existing_iid=$(gl_mr_find_by_source_branch "$branch")
 

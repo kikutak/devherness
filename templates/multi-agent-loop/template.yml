@@ -97,6 +97,12 @@ guard:
 reconcile:
   extends: .ai_loop_image
   stage: guard
+  # 前回のreconcileがまだ完了していない状態で次のスケジュール実行が
+  # 走ると、同じIssueを二重に検知してしまう(ラベル更新前に両方が
+  # 同じ一覧を読んでしまうレースコンディション)。resource_groupで
+  # project全体でreconcileの同時実行を1つに制限し、後続は前回の
+  # 完了を待ってから実行されるようにする。
+  resource_group: reconcile
   variables:
     AI_LOOP_TOKEN: $AI_LOOP_BOT_TOKEN_REVIEW
   rules:

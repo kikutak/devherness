@@ -106,7 +106,7 @@ include:
 | Secret名 | 用途 | 備考 |
 |---|---|---|
 | `ANTHROPIC_API_KEY` または `CLAUDE_CODE_OAUTH_TOKEN` | Claude Code CLIの認証 | GitLab版と同様、詳細は上記表参照 |
-| `AI_LOOP_GH_TOKEN_DESIGN` | 設計役用GitHubアクセストークン(Fine-grained PAT推奨) | 対象リポジトリへの読み取り+Issue/PR書き込み権限 |
+| `AI_LOOP_GH_TOKEN_DESIGN` | 設計役用GitHubアクセストークン(Fine-grained PAT推奨) | Contents: Read **and write**(設計docをpushするため)、Issues/Pull requests: Read and write |
 | `AI_LOOP_GH_TOKEN_CODE` | コーディング役用GitHubアクセストークン | 対象リポジトリへのpush(contents: write)権限 |
 | `AI_LOOP_GH_TOKEN_REVIEW` | レビュー役/guard/test/escalate用GitHubアクセストークン | Issue/PRコメント・ラベル操作権限のみ、マージ権限は付与しない |
 | `AI_LOOP_GH_TOKEN_MERGE` | merge-gate用GitHubアクセストークン | マージ権限(pull_requests: write)を持つのはこのトークンのみ |

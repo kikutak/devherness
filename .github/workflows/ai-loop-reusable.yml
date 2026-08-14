@@ -1,0 +1,304 @@
+name: AI Multi-Agent Loop (reusable)
+
+# GitLab版 templates/multi-agent-loop/template.yml に対応するGitHub Actions版。
+# 利用側リポジトリは examples/github/caller-workflow.yml を参考に
+# 呼び出し用ワークフローを作成し、そこから `uses:` で本ワークフローを呼び出す。
+#
+# 注意: このワークフローは実機(実際のGitHubリポジトリ)でのテストを
+# まだ行っていない。GitLab版は多数の実機デバッグを経て安定させたが、
+# 同種の問題(認証・権限・イベント条件の誤り等)が見つかる前提で
+# 導入時に検証すること(README.mdの「GitHub Actions版について」参照)。
+
+on:
+  workflow_call:
+    inputs:
+      image:
+        description: "docker/agent-runner/Dockerfile をビルドして発行したイメージ(必須)"
+        required: true
+        type: string
+      test_command:
+        description: "対象プロジェクトのテスト実行コマンド(言語非依存にするため抽象化)"
+        default: "make test"
+        type: string
+      max_loop:
+        description: "レビュー/テスト差し戻しループの上限回数"
+        default: 5
+        type: number
+      verify_environment:
+        description: "検証役jobに紐付けるGitHub Environment名(Environment secretsでの資格情報スコープに使用)"
+        default: "staging"
+        type: string
+      mcp_allowed_tools:
+        description: "設計役/レビュー役に許可するGitHub MCPサーバのツール名(カンマ区切り)。空の場合MCPは無効。"
+        default: ""
+        type: string
+      claude_model:
+        description: "claude CLIに渡すモデル指定(空ならCLIの既定値を使用)"
+        default: ""
+        type: string
+      manual_issue_number:
+        description: "workflow_dispatchでの手動起動時に指定するIssue番号"
+        default: ""
+        type: string
+      manual_loop_phase:
+        description: "workflow_dispatchでの手動起動時に指定するフェーズ(design/code/merge)"
+        default: ""
+        type: string
+    secrets:
+      AI_LOOP_GH_TOKEN_DESIGN:
+        required: true
+      AI_LOOP_GH_TOKEN_CODE:
+        required: true
+      AI_LOOP_GH_TOKEN_REVIEW:
+        required: true
+      AI_LOOP_GH_TOKEN_MERGE:
+        required: true
+      AI_LOOP_GH_TOKEN_VERIFY:
+        required: true
+      ANTHROPIC_API_KEY:
+        required: false
+      CLAUDE_CODE_OAUTH_TOKEN:
+        required: false
+      AI_LOOP_NOTIFY_WEBHOOK:
+        required: false
+
+env:
+  AI_LOOP_TRACKING_BRANCH_PREFIX: "agent-loop/issue-"
+
+jobs:
+  # ------------------------------------------------------------------
+  # guard: ワークフロー先頭でループ上限・blocked状態をチェックする。
+  # 超過/既存ブロック時は非0終了し、`needs: [guard]` を持つ後続jobは
+  # GitHub Actionsのデフォルト挙動により自動的にスキップされる。
+  # escalateのみ if: always() で独立して起動する。
+  # ------------------------------------------------------------------
+  guard:
+    if: >-
+      (github.event_name == 'issues' && github.event.action == 'labeled' && github.event.label.name == 'agent:ready') ||
+      github.event_name == 'pull_request' ||
+      github.event_name == 'repository_dispatch' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch))
+    runs-on: ubuntu-latest
+    container: ${{ inputs.image }}
+    outputs:
+      loop_count: ${{ steps.guard.outputs.loop_count }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: guard
+        env:
+          AI_LOOP_TOKEN: ${{ secrets.AI_LOOP_GH_TOKEN_REVIEW }}
+          MAX_LOOP: ${{ inputs.max_loop }}
+          ISSUE_NUMBER: ${{ github.event.issue.number || github.event.client_payload.issue_number || inputs.manual_issue_number }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: /opt/ai-loop/ci/github/guard.sh
+
+  # schedule から起動される取りこぼし救済ジョブ。
+  # label:agent:ready が付いた未着手Issueを検知して設計フェーズを起動する。
+  reconcile:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    container: ${{ inputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+      - env:
+          AI_LOOP_TOKEN: ${{ secrets.AI_LOOP_GH_TOKEN_REVIEW }}
+        run: /opt/ai-loop/ci/github/reconcile.sh
+
+  # ------------------------------------------------------------------
+  # design: 設計役。Issue(または検証NGフィードバック)を分析し、
+  # 設計docを作成、PRの雛形を用意する。
+  # ------------------------------------------------------------------
+  design-role:
+    needs: [guard]
+    if: >-
+      (github.event_name == 'issues' && github.event.action == 'labeled' && github.event.label.name == 'agent:ready') ||
+      (github.event_name == 'repository_dispatch' && github.event.action == 'ai-loop-design') ||
+      (github.event_name == 'workflow_dispatch' && inputs.manual_loop_phase == 'design')
+    runs-on: ubuntu-latest
+    container: ${{ inputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+      - env:
+          AI_LOOP_TOKEN: ${{ secrets.AI_LOOP_GH_TOKEN_DESIGN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number || github.event.client_payload.issue_number || inputs.manual_issue_number }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          AI_LOOP_CLAUDE_MODEL: ${{ inputs.claude_model }}
+          AI_LOOP_MCP_ALLOWED_TOOLS: ${{ inputs.mcp_allowed_tools }}
+        run: |
+          git config --global --add safe.directory '*'
+          git config --global user.email "ai-loop-bot@users.noreply.github.com"
+          git config --global user.name "ai-loop-bot"
+          git remote set-url origin "https://x-access-token:${AI_LOOP_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          /opt/ai-loop/ci/github/fetch_issue_context.sh
+          claude -p "Issue #${ISSUE_NUMBER} を分析し、設計ドキュメントとPR引き継ぎファイルを作成してください。" \
+            --append-system-prompt "$(cat /opt/ai-loop/prompts/github/design-role.md)" \
+            --output-format json \
+            --permission-mode bypassPermissions \
+            ${AI_LOOP_CLAUDE_MODEL:+--model "$AI_LOOP_CLAUDE_MODEL"} \
+            --allowedTools "Read,Write(docs/**),Write(.agent-loop/**),Bash(git *)"
+          /opt/ai-loop/ci/github/github_open_or_update_pr.sh
+          /opt/ai-loop/ci/github/trigger_next.sh code "${ISSUE_NUMBER}"
+
+  # ------------------------------------------------------------------
+  # code: コーディング役。設計/レビュー指摘に基づき実装する。
+  # 実装後のPRブランチへのpushが、pull_requestイベント(synchronize)を
+  # 自動的に誘発する。
+  # ------------------------------------------------------------------
+  coding-role:
+    needs: [guard]
+    if: >-
+      (github.event_name == 'repository_dispatch' && github.event.action == 'ai-loop-code') ||
+      (github.event_name == 'workflow_dispatch' && inputs.manual_loop_phase == 'code')
+    runs-on: ubuntu-latest
+    container: ${{ inputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+      - env:
+          AI_LOOP_TOKEN: ${{ secrets.AI_LOOP_GH_TOKEN_CODE }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.client_payload.issue_number || inputs.manual_issue_number }}
+          AI_LOOP_CLAUDE_MODEL: ${{ inputs.claude_model }}
+        run: |
+          git config --global --add safe.directory '*'
+          git config --global user.email "ai-loop-bot@users.noreply.github.com"
+          git config --global user.name "ai-loop-bot"
+          git remote set-url origin "https://x-access-token:${AI_LOOP_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git fetch origin "${AI_LOOP_TRACKING_BRANCH_PREFIX}${ISSUE_NUMBER}"
+          git checkout "${AI_LOOP_TRACKING_BRANCH_PREFIX}${ISSUE_NUMBER}"
+          claude -p "設計ドキュメントおよびレビュー指摘(あれば)に基づき実装してください。(Issue #${ISSUE_NUMBER})" \
+            --append-system-prompt "$(cat /opt/ai-loop/prompts/github/coder-role.md)" \
+            --output-format json \
+            --permission-mode bypassPermissions \
+            ${AI_LOOP_CLAUDE_MODEL:+--model "$AI_LOOP_CLAUDE_MODEL"} \
+            --allowedTools "Read,Write,Edit,Bash(git *)"
+          git add -A
+          git commit --allow-empty -m "feat(ai-loop) issue no.${ISSUE_NUMBER}" -m "Agent-Loop-Issue ${ISSUE_NUMBER}"
+          git push origin "HEAD:refs/heads/${AI_LOOP_TRACKING_BRANCH_PREFIX}${ISSUE_NUMBER}"
+
+  # ------------------------------------------------------------------
+  # test: 決定論的なテスト実行(Claude非依存)。失敗時はコーディング役へ
+  # 差し戻す(ループ回数にカウントする)。
+  # ------------------------------------------------------------------
+  test-run:
+    needs: [guard]
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    container: ${{ inputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+      - env:
+          AI_LOOP_TOKEN: ${{ secrets.AI_LOOP_GH_TOKEN_REVIEW }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          ISSUE_NUMBER: ${{ github.event.pull_request.head.ref }}
+          TEST_COMMAND: ${{ inputs.test_command }}
+        run: |
+          # head.refからISSUE_NUMBERを復元(agent-loop/issue-<n>形式)
+          ISSUE_NUMBER="${ISSUE_NUMBER##*/issue-}"
+          export ISSUE_NUMBER
+          /opt/ai-loop/ci/run_project_tests.sh || { /opt/ai-loop/ci/github/test_failed.sh; exit 1; }
+
+  # ------------------------------------------------------------------
+  # review: レビュー役。差分をレビューし、承認/差し戻しを判断する。
+  # 判断結果に応じて merge-gate または coding-role を起動する
+  # (マージの実行自体はClaudeを介さない。docs/adr/0004参照)。
+  # ------------------------------------------------------------------
+  review-role:
+    needs: [guard, test-run]
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    container: ${{ inputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - env:
+          AI_LOOP_TOKEN: ${{ secrets.AI_LOOP_GH_TOKEN_REVIEW }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          AI_LOOP_CLAUDE_MODEL: ${{ inputs.claude_model }}
+        run: |
+          ISSUE_NUMBER="${{ github.event.pull_request.head.ref }}"
+          ISSUE_NUMBER="${ISSUE_NUMBER##*/issue-}"
+          export ISSUE_NUMBER
+          claude -p "このPRの差分をレビューし、review-result.json を作成してください。" \
+            --append-system-prompt "$(cat /opt/ai-loop/prompts/github/reviewer-role.md)" \
+            --output-format json \
+            --permission-mode bypassPermissions \
+            ${AI_LOOP_CLAUDE_MODEL:+--model "$AI_LOOP_CLAUDE_MODEL"} \
+            --allowedTools "Read,Bash(git diff *),Bash(git log *)"
+          /opt/ai-loop/ci/github/github_post_review.sh
+
+  # ------------------------------------------------------------------
+  # merge-gate: 決定論的なマージ実行(Claude非依存)。docs/adr/0004参照。
+  # ------------------------------------------------------------------
+  merge-gate:
+    needs: [guard]
+    if: >-
+      (github.event_name == 'repository_dispatch' && github.event.action == 'ai-loop-merge') ||
+      (github.event_name == 'workflow_dispatch' && inputs.manual_loop_phase == 'merge')
+    runs-on: ubuntu-latest
+    container: ${{ inputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+      - env:
+          AI_LOOP_TOKEN: ${{ secrets.AI_LOOP_GH_TOKEN_MERGE }}
+          ISSUE_NUMBER: ${{ github.event.client_payload.issue_number || inputs.manual_issue_number }}
+        run: /opt/ai-loop/ci/github/github_merge_pr.sh
+
+  # ------------------------------------------------------------------
+  # verify: 検証役。mainへのマージ後、検証環境で動作確認する。
+  # 初期段階ではClaudeが検証環境を能動操作する想定(将来的に自動E2Eへ移行)。
+  # ------------------------------------------------------------------
+  verify-role:
+    if: github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    container: ${{ inputs.image }}
+    environment: ${{ inputs.verify_environment }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 5
+      - env:
+          AI_LOOP_TOKEN: ${{ secrets.AI_LOOP_GH_TOKEN_VERIFY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          AI_LOOP_CLAUDE_MODEL: ${{ inputs.claude_model }}
+        run: |
+          git config --global --add safe.directory '*'
+          git config --global user.email "ai-loop-bot@users.noreply.github.com"
+          git config --global user.name "ai-loop-bot"
+          git remote set-url origin "https://x-access-token:${AI_LOOP_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          claude -p "直近でmainにマージされた変更を検証環境で確認し、report.md / result.json を作成してください。" \
+            --append-system-prompt "$(cat /opt/ai-loop/prompts/github/verifier-role.md)" \
+            --output-format json \
+            --permission-mode bypassPermissions \
+            ${AI_LOOP_CLAUDE_MODEL:+--model "$AI_LOOP_CLAUDE_MODEL"} \
+            --allowedTools "Read,Bash(kubectl get *),Bash(kubectl logs *),Bash(curl -sS -X GET *)"
+          /opt/ai-loop/ci/github/verify_report_push.sh
+
+  # ------------------------------------------------------------------
+  # escalate: ループ上限超過時のみ実際に通知を行う。guardの成否に
+  # 関わらず if: always() で起動し、blocked-human でなければ即座に
+  # 正常終了する(ci/github/notify_human.sh 冒頭のガード節を参照)。
+  # ------------------------------------------------------------------
+  escalate:
+    needs: [guard]
+    if: >-
+      always() &&
+      (github.event_name == 'issues' || github.event_name == 'pull_request' ||
+       github.event_name == 'repository_dispatch' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    container: ${{ inputs.image }}
+    steps:
+      - env:
+          AI_LOOP_TOKEN: ${{ secrets.AI_LOOP_GH_TOKEN_REVIEW }}
+          AI_LOOP_NOTIFY_WEBHOOK: ${{ secrets.AI_LOOP_NOTIFY_WEBHOOK }}
+          ISSUE_NUMBER: ${{ github.event.issue.number || github.event.client_payload.issue_number || inputs.manual_issue_number }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: /opt/ai-loop/ci/github/notify_human.sh

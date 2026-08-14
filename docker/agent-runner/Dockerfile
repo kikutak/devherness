@@ -24,14 +24,23 @@ RUN curl -sSL "https://gitlab.com/gitlab-org/cli/-/releases/v${GLAB_VERSION}/dow
     && mv /tmp/bin/glab /usr/local/bin/glab \
     && rm -rf /tmp/glab.tar.gz /tmp/bin
 
+# gh CLI (GitHub公式CLI)。バージョンは導入時に固定/更新すること。
+ARG GH_VERSION=2.63.2
+RUN curl -sSL "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_amd64.tar.gz" \
+    -o /tmp/gh.tar.gz \
+    && tar -xzf /tmp/gh.tar.gz -C /tmp \
+    && mv "/tmp/gh_${GH_VERSION}_linux_amd64/bin/gh" /usr/local/bin/gh \
+    && rm -rf /tmp/gh.tar.gz "/tmp/gh_${GH_VERSION}_linux_amd64"
+
 # Claude Code CLI
 RUN npm install -g @anthropic-ai/claude-code
 
-# このループの仕組み一式(スクリプト・プロンプト・MCPテンプレート)を焼き込む
+# このループの仕組み一式(GitLab版・GitHub版のスクリプト・プロンプト・MCPテンプレート)を焼き込む
 COPY ci/ /opt/ai-loop/ci/
 COPY prompts/ /opt/ai-loop/prompts/
 COPY mcp/ /opt/ai-loop/mcp/
-RUN chmod +x /opt/ai-loop/ci/*.sh /opt/ai-loop/ci/lib/*.sh
+RUN chmod +x /opt/ai-loop/ci/*.sh /opt/ai-loop/ci/lib/*.sh \
+    /opt/ai-loop/ci/github/*.sh /opt/ai-loop/ci/github/lib/*.sh
 
 ENV PATH="/opt/ai-loop/ci:${PATH}"
 

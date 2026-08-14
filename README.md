@@ -1,21 +1,25 @@
 # devherness
 
-Claude Codeによるマルチエージェント自動開発ループ(設計・コーディング・レビュー・テスト・検証)を、社内GitLab CI/CDの機能のみで実現するための**コンポーネント/テンプレートリポジトリ**です。他プロジェクトはこのリポジトリが発行するCI/CD Componentとコンテナイメージを`include:`して利用します。
+Claude Codeによるマルチエージェント自動開発ループ(設計・コーディング・レビュー・テスト・検証)を、CI/CDの機能のみで実現するための**コンポーネント/テンプレートリポジトリ**です。GitLab CI/CD Component版(実機検証済み)とGitHub Actions版(実機未検証、[ADR-0006](docs/adr/0006-github-actions-support.md)参照)の2系統を提供しています。他プロジェクトはこのリポジトリが発行するコンポーネント/reusable workflowとコンテナイメージを利用します。
 
-設計の背景・アーキテクチャの詳細は [docs/design/multi-agent-dev-loop.md](docs/design/multi-agent-dev-loop.md)、個々の設計判断は [docs/adr/](docs/adr/) を参照してください。
+設計の背景・アーキテクチャの詳細は [docs/design/multi-agent-dev-loop.md](docs/design/multi-agent-dev-loop.md)(GitLab版がベース)、個々の設計判断は [docs/adr/](docs/adr/) を参照してください。GitHub版固有の情報は本READMEの [GitHub Actions版について](#github-actions版について) を参照してください。
 
 ## 構成
 
 ```
 templates/multi-agent-loop/template.yml  - GitLab CI/CD Component定義
-docker/agent-runner/Dockerfile           - 各roleジョブの実行イメージ(ci/・prompts/を焼き込む)
+.github/workflows/ai-loop-reusable.yml   - GitHub Actions reusable workflow定義
+examples/github/caller-workflow.yml      - GitHub利用側リポジトリ向けテンプレート
+docker/agent-runner/Dockerfile           - 各roleジョブの実行イメージ(ci/・prompts/を焼き込む、GitLab/GitHub共用)
 ci/                                       - GitLab連携スクリプト(イメージにCOPYされる)
-prompts/                                  - 各ロールのシステムプロンプト(イメージにCOPYされる)
+ci/github/                                - GitHub連携スクリプト(イメージにCOPYされる)
+prompts/                                  - GitLab版ロールのシステムプロンプト(イメージにCOPYされる)
+prompts/github/                           - GitHub版ロールのシステムプロンプト(イメージにCOPYされる)
 mcp/                                      - GitLab MCPサーバ設定テンプレート
 docs/                                     - 設計ドキュメント・ADR
 ```
 
-`ci/`・`prompts/`・`mcp/`はコンポーネント利用側のリポジトリには配置されません。`docker/agent-runner/Dockerfile`でビルドしたイメージの`/opt/ai-loop/`配下に焼き込まれ、`template.yml`の各jobはそのイメージ内のパスを直接呼び出します。
+`ci/`・`prompts/`・`mcp/`はコンポーネント利用側のリポジトリには配置されません。`docker/agent-runner/Dockerfile`でビルドしたイメージの`/opt/ai-loop/`配下に焼き込まれ、各jobはそのイメージ内のパスを直接呼び出します。
 
 ## 前提: devhernessプロジェクトの可視性
 
@@ -81,3 +85,32 @@ include:
 - **TLS証明書の検証について**: 自己署名/内部CA証明書を使うGitLabインスタンスの場合、Dockerレジストリ・dind・git等、複数の箇所で個別にTLS検証を回避する設定が必要になった(このリポジトリでは動作確認の速度を優先し、Runnerホストの`insecure-registries`設定や`git config http.sslVerify false`等のクイックな回避策を採用している)。**本番導入時は、内部CA証明書を`docker/agent-runner/Dockerfile`のOS信頼ストアに登録し`update-ca-certificates`する方式に切り替え、TLS検証を有効なままにすることを強く推奨する。**
 
 その他の未解決事項は [docs/design/multi-agent-dev-loop.md 11章](docs/design/multi-agent-dev-loop.md#11-未解決将来検討事項) にまとめています。
+
+## GitHub Actions版について
+
+**このGitHub Actions版は実際のGitHubリポジトリでの動作検証をまだ行っていません。** 上記GitLab版は多数回の実機デバッグを経て安定化させたものですが、GitHub版は設計・実装のみの段階です。導入時は同様の検証サイクル(認証・権限・YAML構文・イベント条件などのデバッグ)が必要になる前提で進めてください。詳細な設計判断は [ADR-0006](docs/adr/0006-github-actions-support.md) を参照してください。
+
+### 利用方法(GitHub側、対象リポジトリ)
+
+1. [examples/github/caller-workflow.yml](examples/github/caller-workflow.yml) を対象リポジトリの `.github/workflows/ai-loop.yml` としてコピーする。
+2. `<org>`・`branches: [main]`・`image:` 等、コメントに従って調整する。
+3. 対象リポジトリの **Settings > Secrets and variables > Actions** に以下を登録する。
+
+| Secret名 | 用途 | 備考 |
+|---|---|---|
+| `ANTHROPIC_API_KEY` または `CLAUDE_CODE_OAUTH_TOKEN` | Claude Code CLIの認証 | GitLab版と同様、詳細は上記表参照 |
+| `AI_LOOP_GH_TOKEN_DESIGN` | 設計役用GitHubアクセストークン(Fine-grained PAT推奨) | 対象リポジトリへの読み取り+Issue/PR書き込み権限 |
+| `AI_LOOP_GH_TOKEN_CODE` | コーディング役用GitHubアクセストークン | 対象リポジトリへのpush(contents: write)権限 |
+| `AI_LOOP_GH_TOKEN_REVIEW` | レビュー役/guard/test/escalate用GitHubアクセストークン | Issue/PRコメント・ラベル操作権限のみ、マージ権限は付与しない |
+| `AI_LOOP_GH_TOKEN_MERGE` | merge-gate用GitHubアクセストークン | マージ権限(pull_requests: write)を持つのはこのトークンのみ |
+| `AI_LOOP_GH_TOKEN_VERIFY` | 検証役用GitHubアクセストークン | Environment secretsとしてのスコープ限定を推奨 |
+| `AI_LOOP_NOTIFY_WEBHOOK` | (任意)エスカレーション通知先Slack Incoming Webhook URL | 未設定時はIssue/PRコメントのみ |
+
+GitLabの Pipeline Trigger Token に相当するものはGitHub版では不要(`repository_dispatch`は各Botトークン自体に`repo`スコープがあれば呼び出せる)。
+
+### ループの起動方法(GitHub版)
+
+1. GitHub Issueを作成し、ラベル `agent:ready` を付与する。**この時点で `issues: types: [labeled]` トリガーにより即座に設計フェーズが起動する**(GitLab版のようなポーリング待ちが基本的に不要)。
+2. 手動起動したい場合は Actions タブから対象ワークフローを選び、「Run workflow」で `issue_number` / `loop_phase` を指定して実行する(GitLab版の「Run pipeline」画面に相当)。
+
+以降のレビュー→修正→マージ→検証→(必要なら再設計)の流れはGitLab版と同じ考え方で実装している([docs/design/multi-agent-dev-loop.md 3章](docs/design/multi-agent-dev-loop.md#3-ループ全体のシーケンス)参照、GitHub版はイベント名・API呼び出しが異なる)。

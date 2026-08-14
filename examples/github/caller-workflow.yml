@@ -1,0 +1,55 @@
+# 利用側リポジトリの .github/workflows/ai-loop.yml としてこのファイルをコピーし、
+# 必要に応じて調整してください。トリガー条件(on:)はreusable workflow側では
+# 定義できない(GitHub Actionsの仕様上、workflow_callを受け取る側は
+# on/pull_request等のイベントトリガーを持てない)ため、呼び出し側であるこの
+# ファイルで定義する必要があります。
+#
+# 事前準備:
+#   - このリポジトリの Settings > Secrets and variables > Actions に
+#     README.md記載の各シークレットを登録しておくこと
+#   - branches: [main] の部分は、対象リポジトリのデフォルトブランチ名に
+#     合わせて調整すること
+
+name: AI Multi-Agent Loop
+
+on:
+  issues:
+    types: [labeled]
+  pull_request:
+    types: [opened, synchronize]
+  push:
+    branches: [main]
+  repository_dispatch:
+    types: [ai-loop-design, ai-loop-code, ai-loop-merge]
+  schedule:
+    # agent:ready ラベル付き未着手Issueの取りこぼし救済(reconcile)。
+    # GitHub Actionsのschedule実行間隔には数分〜十数分の実行遅延が
+    # 生じ得るので、即時性が必要な場合は issues:labeled トリガー
+    # (上記)が優先的に効くことを前提に、こちらは保険として使う。
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: "対象Issue番号"
+        required: false
+      loop_phase:
+        description: "手動起動するフェーズ"
+        required: false
+        type: choice
+        options:
+          - design
+          - code
+          - merge
+
+jobs:
+  ai-loop:
+    uses: <org>/devherness/.github/workflows/ai-loop-reusable.yml@main
+    with:
+      image: "ghcr.io/<org>/devherness/agent-runner:latest"
+      test_command: "npm test"
+      max_loop: 5
+      verify_environment: "staging"
+      mcp_allowed_tools: ""
+      manual_issue_number: ${{ inputs.issue_number || '' }}
+      manual_loop_phase: ${{ inputs.loop_phase || '' }}
+    secrets: inherit

@@ -15,3 +15,4 @@ Architecture Decision Record(ADR)。個々の設計判断とその根拠・ト�
 - [0003-headless-per-stage-agent-execution.md](adr/0003-headless-per-stage-agent-execution.md) — エージェント実行モデルをステージごとの独立headless実行にする
 - [0004-merge-gate-separation.md](adr/0004-merge-gate-separation.md) — レビュー判断とマージ実行を別jobに分離する
 - [0005-gitlab-integration-mcp-vs-cli.md](adr/0005-gitlab-integration-mcp-vs-cli.md) — GitLab連携をMCPサーバとCLI/API直叩きのハイブリッドにする
+- [0006-github-actions-support.md](adr/0006-github-actions-support.md) — GitHub Actions版を独立した並行実装として追加する

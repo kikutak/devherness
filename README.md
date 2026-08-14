@@ -90,10 +90,17 @@ include:
 
 **このGitHub Actions版は実際のGitHubリポジトリでの動作検証をまだ行っていません。** 上記GitLab版は多数回の実機デバッグを経て安定化させたものですが、GitHub版は設計・実装のみの段階です。導入時は同様の検証サイクル(認証・権限・YAML構文・イベント条件などのデバッグ)が必要になる前提で進めてください。詳細な設計判断は [ADR-0006](docs/adr/0006-github-actions-support.md) を参照してください。
 
+### イメージの準備(devherness側、初回のみ)
+
+`.github/workflows/build-image.yml` が `main` へのpush(`docker/agent-runner/**`等の変更時)で自動的に `ghcr.io/<owner>/devherness/agent-runner` へイメージを発行する。devhernessがPrivateリポジトリの場合、発行されるパッケージも既定でPrivateになるため、**利用側リポジトリからpullできるようにパッケージ側でアクセス許可が必要**(GitLab版で`Component`解決のためにInternal可視性が必要だったのと同種の注意点)。
+
+1. `https://github.com/<owner>?tab=packages` からパッケージ `devherness/agent-runner` を開く
+2. **Package settings > Manage Actions access** で、利用側リポジトリ(例: `test`)を追加し、Role を **Read** にする
+
 ### 利用方法(GitHub側、対象リポジトリ)
 
 1. [examples/github/caller-workflow.yml](examples/github/caller-workflow.yml) を対象リポジトリの `.github/workflows/ai-loop.yml` としてコピーする。
-2. `<org>`・`branches: [main]`・`image:` 等、コメントに従って調整する。
+2. `<org>`・`branches: [main]`・`image:` 等、コメントに従って調整する(`image:` は `ghcr.io/<owner>/devherness/agent-runner:latest` 等)。
 3. 対象リポジトリの **Settings > Secrets and variables > Actions** に以下を登録する。
 
 | Secret名 | 用途 | 備考 |

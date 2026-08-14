@@ -32,6 +32,15 @@ RUN curl -sSL "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${
     && mv "/tmp/gh_${GH_VERSION}_linux_amd64/bin/gh" /usr/local/bin/gh \
     && rm -rf /tmp/gh.tar.gz "/tmp/gh_${GH_VERSION}_linux_amd64"
 
+# gosu (root起動のコンテナ内で、claude実行時だけ非rootユーザーへ切り替えるため)。
+# GitHub Actionsのcontainer:ジョブはroot前提の内部動作(actions/checkout等)があるため、
+# コンテナ全体は非rootにできない。claude CLIの--permission-mode bypassPermissionsは
+# root実行を拒否するため、claude呼び出しの瞬間だけgosuでnodeユーザーに切り替える。
+ARG GOSU_VERSION=1.17
+RUN curl -sSL "https://github.com/tianon/gosu/releases/download/${GOSU_VERSION}/gosu-amd64" \
+    -o /usr/local/bin/gosu \
+    && chmod +x /usr/local/bin/gosu
+
 # Claude Code CLI
 RUN npm install -g @anthropic-ai/claude-code
 
@@ -45,9 +54,9 @@ RUN chmod +x /opt/ai-loop/ci/*.sh /opt/ai-loop/ci/lib/*.sh \
 ENV PATH="/opt/ai-loop/ci:${PATH}"
 
 # claude CLIは --permission-mode bypassPermissions (非対話CI実行に必須) を
-# root/sudo権限では拒否するため、非rootユーザーで実行する。
+# root/sudo権限では拒否するため、claude実行時のみ非rootユーザーに切り替える
+# (gosu、上記参照)。コンテナ自体のデフォルトユーザーはroot のままにする。
 # node:20-slim には既にUID 1000の "node" ユーザーが存在するためそれを再利用する。
 RUN mkdir -p /workspace && chown -R node:node /workspace
 
-USER node
 WORKDIR /workspace

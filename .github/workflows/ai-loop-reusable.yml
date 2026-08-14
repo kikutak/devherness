@@ -134,7 +134,8 @@ jobs:
           git config --global user.name "ai-loop-bot"
           git remote set-url origin "https://x-access-token:${AI_LOOP_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           /opt/ai-loop/ci/github/fetch_issue_context.sh
-          claude -p "Issue #${ISSUE_NUMBER} を分析し、設計ドキュメントとPR引き継ぎファイルを作成してください。" \
+          chown -R node:node .
+          gosu node claude -p "Issue #${ISSUE_NUMBER} を分析し、設計ドキュメントとPR引き継ぎファイルを作成してください。" \
             --append-system-prompt "$(cat /opt/ai-loop/prompts/github/design-role.md)" \
             --output-format json \
             --permission-mode bypassPermissions \
@@ -170,7 +171,8 @@ jobs:
           git remote set-url origin "https://x-access-token:${AI_LOOP_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git fetch origin "${AI_LOOP_TRACKING_BRANCH_PREFIX}${ISSUE_NUMBER}"
           git checkout "${AI_LOOP_TRACKING_BRANCH_PREFIX}${ISSUE_NUMBER}"
-          claude -p "設計ドキュメントおよびレビュー指摘(あれば)に基づき実装してください。(Issue #${ISSUE_NUMBER})" \
+          chown -R node:node .
+          gosu node claude -p "設計ドキュメントおよびレビュー指摘(あれば)に基づき実装してください。(Issue #${ISSUE_NUMBER})" \
             --append-system-prompt "$(cat /opt/ai-loop/prompts/github/coder-role.md)" \
             --output-format json \
             --permission-mode bypassPermissions \
@@ -226,7 +228,9 @@ jobs:
           ISSUE_NUMBER="${{ github.event.pull_request.head.ref }}"
           ISSUE_NUMBER="${ISSUE_NUMBER##*/issue-}"
           export ISSUE_NUMBER
-          claude -p "このPRの差分をレビューし、review-result.json を作成してください。" \
+          chown -R node:node .
+          gosu node git config --global --add safe.directory '*'
+          gosu node claude -p "このPRの差分をレビューし、review-result.json を作成してください。" \
             --append-system-prompt "$(cat /opt/ai-loop/prompts/github/reviewer-role.md)" \
             --output-format json \
             --permission-mode bypassPermissions \
@@ -274,7 +278,8 @@ jobs:
           git config --global user.email "ai-loop-bot@users.noreply.github.com"
           git config --global user.name "ai-loop-bot"
           git remote set-url origin "https://x-access-token:${AI_LOOP_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          claude -p "直近でmainにマージされた変更を検証環境で確認し、report.md / result.json を作成してください。" \
+          chown -R node:node .
+          gosu node claude -p "直近でmainにマージされた変更を検証環境で確認し、report.md / result.json を作成してください。" \
             --append-system-prompt "$(cat /opt/ai-loop/prompts/github/verifier-role.md)" \
             --output-format json \
             --permission-mode bypassPermissions \

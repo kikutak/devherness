@@ -135,6 +135,7 @@ jobs:
           git remote set-url origin "https://x-access-token:${AI_LOOP_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           /opt/ai-loop/ci/github/fetch_issue_context.sh
           chown -R node:node .
+          echo "DEBUG whoami=$(whoami) id=$(id) gosu-whoami=$(gosu node whoami) gosu-id=$(gosu node id)"
           gosu node claude -p "Issue #${ISSUE_NUMBER} を分析し、設計ドキュメントとPR引き継ぎファイルを作成してください。" \
             --append-system-prompt "$(cat /opt/ai-loop/prompts/github/design-role.md)" \
             --output-format json \

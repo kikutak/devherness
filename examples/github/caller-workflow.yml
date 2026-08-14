@@ -20,7 +20,7 @@ on:
   push:
     branches: [main]
   repository_dispatch:
-    types: [ai-loop-design, ai-loop-code, ai-loop-merge]
+    types: [ai-loop-design, ai-loop-code, ai-loop-merge, ai-loop-verify]
   schedule:
     # agent:ready ラベル付き未着手Issueの取りこぼし救済(reconcile)。
     # GitHub Actionsのschedule実行間隔には数分〜十数分の実行遅延が

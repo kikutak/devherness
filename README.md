@@ -121,3 +121,7 @@ GitLabの Pipeline Trigger Token に相当するものはGitHub版では不要(`
 2. 手動起動したい場合は Actions タブから対象ワークフローを選び、「Run workflow」で `issue_number` / `loop_phase` を指定して実行する(GitLab版の「Run pipeline」画面に相当)。
 
 以降のレビュー→修正→マージ→検証→(必要なら再設計)の流れはGitLab版と同じ考え方で実装している([docs/design/multi-agent-dev-loop.md 3章](docs/design/multi-agent-dev-loop.md#3-ループ全体のシーケンス)参照、GitHub版はイベント名・API呼び出しが異なる)。
+
+### レート制限(Claude利用枠)に達した場合の自動再試行
+
+`CLAUDE_CODE_OAUTH_TOKEN`(Pro/Maxサブスクリプション)利用時、利用枠の上限(5時間/週次のレート制限)に達すると`claude`コマンドがエラーを返す。各ロールのjobはこのエラーを検知すると、ラベル`rate-limited`と`phase:<design|code|review|verify>`を付与していったん正常終了する(ループ回数にはカウントされない)。`reconcile`(schedule実行、既定15分間隔)がこのラベルを検知し、該当フェーズを自動的に再試行する。人間による対応は不要。ただし再試行までにschedule実行間隔ぶんの遅延が生じる点は留意すること。
